@@ -21,7 +21,7 @@ def overlay_ar_frame(main_frame, cropped_ar_frame, target_corners):
 
     # Create mask to hollow the book area
     mask = np.zeros((main_h, main_w), dtype=np.uint8)
-    cv2.fillConvexPoly(mask, dst_corners.astype(np.int32), 255)
+    cv2.fillPoly(mask, [dst_corners.astype(np.int32)], 255)
 
     mask_inv = cv2.bitwise_not(mask)
     main_bg = cv2.bitwise_and(main_frame, main_frame, mask=mask_inv)
