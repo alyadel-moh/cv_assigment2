@@ -15,7 +15,7 @@ def compute_homography(pts1,pts2):
     H = h.reshape(3, 3)
     H = H / H[2, 2] 
     return H
-def verify_homography(H, pts1, pts2, img1, img2, num_pts=5):
+def verify_homography(H, pts1, pts2, img1, img2, num_pts=10):
     """
     Project a few pts1 through H and display them on img2.
     """

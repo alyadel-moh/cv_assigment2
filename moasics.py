@@ -76,7 +76,6 @@ def create_mosaic(img1, img2, H):
     h1, w1 = warped_img1.shape[:2]
     h2, w2 = img2.shape[:2]
 
-    # Calculate the global canvas boundaries
     canvas_x_min = min(0, x_min)
     canvas_y_min = min(0, y_min)
     
@@ -88,14 +87,18 @@ def create_mosaic(img1, img2, H):
 
     canvas = np.zeros((canvas_h, canvas_w, 3), dtype=np.uint8)
 
-    # Calculate the relative placement offsets
     offset_x1 = x_min - canvas_x_min
     offset_y1 = y_min - canvas_y_min
     
     offset_x2 = 0 - canvas_x_min
     offset_y2 = 0 - canvas_y_min
-    
-    canvas[offset_y1:offset_y1+h1, offset_x1:offset_x1+w1] = warped_img1
+
+    # 1. Place the Anchor (img2) FIRST
     canvas[offset_y2:offset_y2+h2, offset_x2:offset_x2+w2] = img2
+
+    # 2. Mask out the black pixels from the warped image and paint it on top
+    mask = np.any(warped_img1 > 0, axis=-1)
+    roi = canvas[offset_y1:offset_y1+h1, offset_x1:offset_x1+w1]
+    roi[mask] = warped_img1[mask]
 
     return canvas
