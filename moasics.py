@@ -2,9 +2,10 @@ import cv2
 import numpy as np
 import matplotlib.pyplot as plt
 
+
 def warp_image(img, H):
     h, w = img.shape[:2]
-    
+
     # Step 1: map the 4 corners of img through H to find output bounds
     corners = np.array([[0, 0], [w, 0], [w, h], [0, h]], dtype=np.float32)
     corners_h = np.column_stack([corners, np.ones(4)])  # homogeneous
@@ -25,7 +26,7 @@ def warp_image(img, H):
 
     # build grid of output pixel coordinates
     ys, xs = np.mgrid[0:out_h, 0:out_w]
-    
+
     # Shift xs and ys to their absolute coordinates in the destination space.
     xs_absolute = xs + x_min
     ys_absolute = ys + y_min
@@ -33,7 +34,7 @@ def warp_image(img, H):
     # apply H_inv to get source coords in img1
     ones = np.ones_like(xs_absolute)
     coords = np.stack([xs_absolute, ys_absolute, ones], axis=-1).reshape(-1, 3).T
-    src_coords = (H_inv @ coords.astype(np.float64))
+    src_coords = H_inv @ coords.astype(np.float64)
     src_coords /= src_coords[2:3, :]
     src_x = src_coords[0].reshape(out_h, out_w)
     src_y = src_coords[1].reshape(out_h, out_w)
@@ -52,18 +53,28 @@ def warp_image(img, H):
     valid = (x0 >= 0) & (y0 >= 0) & (x0 < w) & (y0 < h)
 
     for c in range(3):
-        top_left     = np.where(valid, img[np.clip(y0,0,h-1), np.clip(x0,0,w-1), c], 0)
-        top_right    = np.where(valid, img[np.clip(y0,0,h-1), np.clip(x1,0,w-1), c], 0)
-        bot_left     = np.where(valid, img[np.clip(y1,0,h-1), np.clip(x0,0,w-1), c], 0)
-        bot_right    = np.where(valid, img[np.clip(y1,0,h-1), np.clip(x1,0,w-1), c], 0)
+        top_left = np.where(
+            valid, img[np.clip(y0, 0, h - 1), np.clip(x0, 0, w - 1), c], 0
+        )
+        top_right = np.where(
+            valid, img[np.clip(y0, 0, h - 1), np.clip(x1, 0, w - 1), c], 0
+        )
+        bot_left = np.where(
+            valid, img[np.clip(y1, 0, h - 1), np.clip(x0, 0, w - 1), c], 0
+        )
+        bot_right = np.where(
+            valid, img[np.clip(y1, 0, h - 1), np.clip(x1, 0, w - 1), c], 0
+        )
 
         warped[:, :, c] = np.where(
             valid,
-            (top_left  * (1-dx) * (1-dy) +
-             top_right * dx  * (1-dy) +
-             bot_left  * (1-dx) * dy  +
-             bot_right * dx  * dy),
-            0
+            (
+                top_left * (1 - dx) * (1 - dy)
+                + top_right * dx * (1 - dy)
+                + bot_left * (1 - dx) * dy
+                + bot_right * dx * dy
+            ),
+            0,
         ).astype(np.uint8)
 
     # FIXED: Return the absolute coordinates instead of conditional offsets
@@ -78,7 +89,7 @@ def create_mosaic(img1, img2, H):
 
     canvas_x_min = min(0, x_min)
     canvas_y_min = min(0, y_min)
-    
+
     canvas_x_max = max(w2, x_min + w1)
     canvas_y_max = max(h2, y_min + h1)
 
@@ -89,16 +100,48 @@ def create_mosaic(img1, img2, H):
 
     offset_x1 = x_min - canvas_x_min
     offset_y1 = y_min - canvas_y_min
-    
+
     offset_x2 = 0 - canvas_x_min
     offset_y2 = 0 - canvas_y_min
 
     # 1. Place the Anchor (img2) FIRST
-    canvas[offset_y2:offset_y2+h2, offset_x2:offset_x2+w2] = img2
+    canvas[offset_y2 : offset_y2 + h2, offset_x2 : offset_x2 + w2] = img2
 
     # 2. Mask out the black pixels from the warped image and paint it on top
     mask = np.any(warped_img1 > 0, axis=-1)
-    roi = canvas[offset_y1:offset_y1+h1, offset_x1:offset_x1+w1]
+    roi = canvas[offset_y1 : offset_y1 + h1, offset_x1 : offset_x1 + w1]
     roi[mask] = warped_img1[mask]
 
     return canvas
+
+
+def forward_warp(img, H, out_shape):
+    h, w = img.shape[:2]
+    out_h, out_w = out_shape
+
+    # Create an empty output image
+    warped = np.zeros((out_h, out_w, 3), dtype=np.uint8)
+
+    # Build grid of source image
+    xs, ys = np.meshgrid(np.arange(w), np.arange(h))
+
+    # Build homogeneous coordinates for source image
+    coords = np.stack([xs.ravel(), ys.ravel(), np.ones_like(xs.ravel())])
+
+    mapped_coords = H @ coords
+    mapped_coords /= mapped_coords[2, :]
+
+    # Round to nearesr integer pixel
+    dst_x = np.round(mapped_coords[0, :]).astype(int)
+    dst_y = np.round(mapped_coords[1, :]).astype(int)
+
+    valid_mask = (dst_x >= 0) & (dst_x < out_w) & (dst_y >= 0) & (dst_y < out_h)
+    src_x_valid = xs.ravel()[valid_mask]
+    src_y_valid = ys.ravel()[valid_mask]
+
+    dst_x_valid = dst_x[valid_mask]
+    dst_y_valid = dst_y[valid_mask]
+
+    warped[dst_y_valid, dst_x_valid] = img[src_y_valid, src_x_valid]
+
+    return warped
